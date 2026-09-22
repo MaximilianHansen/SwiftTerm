@@ -205,10 +205,16 @@ final class BidiEscapeTests: TerminalDelegate {
         eraseLeft.feed(text: "\u{1b}[2;1H\u{1b}[1K")
         #expect(eraseLeft.buffer.lines[1].isWrapped)
 
+        // xterm.js parity (`InputHandler.eraseInLine`, case 2 → clearWrap:
+        // true): "Erase All" replaces the row, so it stops being a soft-wrap
+        // continuation of the row above. The row BELOW it keeps its own flag
+        // — it still continues the (now empty) row 1. TUIs that repaint with
+        // ESC[2K (Ink's eraseLines) depend on this: a stale flag makes the
+        // next widen glue the repainted row onto the row above it.
         let eraseAll = Terminal(delegate: self, options: TerminalOptions(cols: 5, rows: 3))
         eraseAll.feed(text: "abcdefghijk")
         eraseAll.feed(text: "\u{1b}[2;1H\u{1b}[2K")
-        #expect(eraseAll.buffer.lines[1].isWrapped)
+        #expect(!eraseAll.buffer.lines[1].isWrapped)
         #expect(eraseAll.buffer.lines[2].isWrapped)
     }
 

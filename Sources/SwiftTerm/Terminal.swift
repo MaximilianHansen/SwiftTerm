@@ -1729,7 +1729,14 @@ open class Terminal {
             buffer.y = by + 1
             movedToNextLine = true
             let line = buffer.lines[buffer.yBase + buffer.y]
-            if !line.isWrapped {
+            // A hard line feed lands on a row that is, by definition, no longer
+            // a soft-wrap continuation of the row above — clear the flag the
+            // way xterm.js's lineFeed() does. Without this, a row that once
+            // auto-wrapped keeps isWrapped after a TUI repaints it in place,
+            // and the next widen re-joins unrelated rows.
+            if line.isWrapped {
+                line.isWrapped = false
+            } else {
                 line.bidiState = currentBidiState
             }
         }
@@ -3262,11 +3269,16 @@ open class Terminal {
         
         switch p {
         case 0:
-            eraseInBufferLine (y: buffer.y, start: buffer.x, end: cols)
+            // Erasing from column 0 discards the whole row, so it can no longer
+            // be a soft-wrap continuation of the row above (xterm.js parity).
+            eraseInBufferLine (y: buffer.y, start: buffer.x, end: cols, clearWrap: buffer.x == 0)
         case 1:
             eraseInBufferLine (y: buffer.y, start: 0, end: buffer.x + 1)
         case 2:
-            eraseInBufferLine (y: buffer.y, start: 0, end: cols)
+            // "Erase All" replaces the row: a TUI that redraws with ESC[2K
+            // (Ink's eraseLines) must not leave a stale isWrapped behind, or
+            // the next reflow glues the redrawn row onto the row above.
+            eraseInBufferLine (y: buffer.y, start: 0, end: cols, clearWrap: true)
         default:
             break
         }
